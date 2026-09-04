@@ -1,0 +1,18 @@
+# Source: beads-linear/templates/pvc.yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: beads-linear-data
+  namespace: beads
+  labels:
+    app.kubernetes.io/name: beads-linear
+    app.kubernetes.io/instance: beads-linear
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/version: "0.1.0"
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+  storageClassName: upcloud-block-storage-maxiops
