@@ -6,10 +6,14 @@ metadata:
     {{- include "beads-linear.labels" . | nindent 4 }}
 spec:
   replicas: {{ .Values.replicaCount }}
-  # The accounts file is a single ReadWriteOnce volume, so a rolling update
-  # must not run two writers against it at once.
+  # The accounts file is a single ReadWriteOnce volume, so the old pod must be
+  # gone before the new one starts. maxSurge 0 enforces that without switching
+  # to Recreate, which cannot be applied over an existing RollingUpdate object.
   strategy:
-    type: Recreate
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1
   selector:
     matchLabels:
       {{- include "beads-linear.selectorLabels" . | nindent 6 }}

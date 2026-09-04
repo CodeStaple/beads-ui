@@ -1,5 +1,5 @@
 import type { Issue } from './beads';
-import { serializeJsonl } from './beads';
+import { parseJsonl, serializeJsonl } from './beads';
 
 /**
  * A new workspace opens on a worked example rather than an empty list: three
@@ -55,11 +55,21 @@ export function exampleIssues(prefix: string, actor: string): Issue[] {
         'Change its status and the change is committed to GitHub and streamed back to every ' +
         'open tab.',
       labels: ['welcome'],
-      dependencies: [{ depends_on_id: id('001'), type: 'blocks' }],
+      dependencies: [{ issue_id: id('003'), depends_on_id: id('001'), type: 'blocks' }],
     },
-  ] as Issue[];
+  ];
 }
 
 export function exampleJsonl(prefix: string, actor: string): string {
-  return serializeJsonl(exampleIssues(prefix, actor));
+  const content = serializeJsonl(exampleIssues(prefix, actor));
+
+  // The seed is written straight to a new workspace's database, so a line the
+  // parser would reject must fail here rather than silently vanish from the
+  // board. A missing dependency `issue_id` did exactly that once.
+  const { issues, skipped } = parseJsonl(content);
+  if (skipped > 0 || issues.length !== exampleIssues(prefix, actor).length) {
+    throw new Error(`Seed data is not valid beads JSONL (${skipped} line(s) rejected)`);
+  }
+
+  return content;
 }
