@@ -4,56 +4,52 @@ Target: **https://beads.smartoptics.dev** on the `launch-week-2026` cluster,
 behind Traefik BasicAuth, with cert-manager TLS and DNS published by Ankra
 custom-dns from the ingress annotation.
 
-## One blocker needs a human
+## The registry
 
-Ankra's GitHub App installation does not include this repository, so Ankra
-cannot read it to generate the build workflow or publish the image:
+Harbor at `artifact.smartoptics.dev`, matching every other app on this cluster:
 
 ```
-Could not read the smartoptics-dwdm/beads-linear repository on branch 'main':
-GitHub returned HTTP 404 - repository ... was not found, or the configured
-GitHub credential cannot access it
+artifact.smartoptics.dev/sggame-images/suitcase-backend:sha-...
+artifact.smartoptics.dev/chat-demo-images/chat-demo:sha-...
+artifact.smartoptics.dev/beads-images/beads-linear:sha-...   <- this app
 ```
 
-Grant it once, at
-**https://github.com/organizations/smartoptics-dwdm/settings/installations** →
-the Ankra app → *Repository access* → add `beads-linear`.
+The cluster pulls with the `harbor-registry` dockerconfigjson Secret, already
+copied into the `beads` namespace.
 
-Listing or changing an App installation needs the `admin:org` scope, which the
-CLI token here does not carry — hence the manual step.
+## One blocker: a Harbor push credential
 
-## Then
+Everything else is done. Pushing needs a Harbor account or robot with push
+rights to a `beads-images` project (create it if absent — Harbor does not
+auto-create projects on push).
 
 ```bash
-# 1. Ankra re-reads the repo and opens its setup PR
-ankra application retry 0486c3a9-0547-4c8e-83f0-678466ec063c
-ankra application get  0486c3a9-0547-4c8e-83f0-678466ec063c   # wait for analysis_status: completed
+docker login artifact.smartoptics.dev          # password stays in your keychain
+docker buildx build --platform linux/amd64 \
+  -t artifact.smartoptics.dev/beads-images/beads-linear:v1 --push .
+```
 
-# 2. Merge the setup PR it opens, which publishes the image
-#    (Ankra writes ANKRA_REGISTRY_* into this repo's Actions secrets)
+For CI, set `HARBOR_USERNAME` / `HARBOR_PASSWORD` as Actions secrets on this
+repo — the same names sggame uses — and `.github/workflows/build.yaml` takes
+over on every push to main.
 
-# 3. Deploy
+## Then deploy
+
+```bash
 helm upgrade --install beads-linear helm/beads-linear \
   --kube-context ankra-launch-week-2026 \
-  --namespace beads --create-namespace \
-  --set image.tag=<published tag> \
-  --set-file github.token=<(gh auth token) \
+  --namespace beads \
+  --set image.tag=v1 \
+  --set github.token="$(gh auth token)" \
   --set basicAuth.users='<htpasswd line>'
 ```
 
-## If you would rather not wait on the App
+## Ankra Applications lane (optional, not required)
 
-The image is already built and verified locally. With push credentials for
-`registry.ankra.cloud` you can skip Ankra's lane entirely:
-
-```bash
-docker login registry.ankra.cloud
-docker buildx build --platform linux/amd64 \
-  -t registry.ankra.cloud/org-08267821-3c87-47b2-a759-67c3dbf91c0c/images/beads-linear:v1 \
-  --push .
-```
-
-Then run step 3 above with `--set image.tag=v1`.
+`ankra application` (id `0486c3a9-0547-4c8e-83f0-678466ec063c`) currently fails
+analysis because Ankra's GitHub App installation does not include this repo.
+Adding it needs `admin:org`. This only matters if you want Ankra to generate
+and own the build workflow; the Harbor route above does not need it.
 
 ## What the chart puts in front of the app
 

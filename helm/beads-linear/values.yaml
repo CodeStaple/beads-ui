@@ -1,12 +1,14 @@
 replicaCount: 2
 
+# Matches the lane the rest of this cluster already uses:
+#   artifact.smartoptics.dev/<app>-images/<app>:sha-<short>
 image:
-  repository: registry.ankra.cloud/org-08267821-3c87-47b2-a759-67c3dbf91c0c/images/beads-linear
+  repository: artifact.smartoptics.dev/beads-images/beads-linear
   tag: ""            # defaults to .Chart.AppVersion
   pullPolicy: IfNotPresent
 
 imagePullSecrets:
-  - name: ankra-registry-pull
+  - name: harbor-registry
 
 # GitHub is the database. The token is supplied as a Secret, never baked into
 # the image and never committed.

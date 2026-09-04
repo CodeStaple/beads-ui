@@ -10,8 +10,8 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  REGISTRY: registry.ankra.cloud
-  PROJECT: org-08267821-3c87-47b2-a759-67c3dbf91c0c
+  REGISTRY: artifact.smartoptics.dev
+  PROJECT: beads-images
 
 jobs:
   verify:
@@ -50,8 +50,8 @@ jobs:
       - uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
-          username: ${{ secrets.ANKRA_REGISTRY_USERNAME }}
-          password: ${{ secrets.ANKRA_REGISTRY_PASSWORD }}
+          username: ${{ secrets.HARBOR_USERNAME }}
+          password: ${{ secrets.HARBOR_PASSWORD }}
 
       - uses: docker/build-push-action@v6
         with:
@@ -60,7 +60,7 @@ jobs:
           # The cluster nodes are amd64; this runner is too, so no QEMU needed.
           platforms: linux/amd64
           tags: |
-            ${{ env.REGISTRY }}/${{ env.PROJECT }}/images/beads-linear:${{ steps.meta.outputs.sha_tag }}
-            ${{ env.REGISTRY }}/${{ env.PROJECT }}/images/beads-linear:latest
+            ${{ env.REGISTRY }}/${{ env.PROJECT }}/beads-linear:${{ steps.meta.outputs.sha_tag }}
+            ${{ env.REGISTRY }}/${{ env.PROJECT }}/beads-linear:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
