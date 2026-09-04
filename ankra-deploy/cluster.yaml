@@ -1,0 +1,51 @@
+apiVersion: v1
+kind: ImportCluster
+metadata:
+  name: ankra-build
+  description: ankra-build
+spec:
+  stacks:
+    - name: beads-ui
+      description: beads-linear - a Linear-style tracker with built-in auth, passkeys and per-signup organisations
+      manifests:
+        - name: namespace
+          parents: []
+          from_file: "manifests/namespace.yaml"
+        - name: session-secret
+          parents:
+            - kind: manifest
+              name: namespace
+          from_file: "manifests/session-secret.yaml"
+          encrypted_paths:
+            - sessionSecret
+        - name: ghcr-pull-secret
+          parents:
+            - kind: manifest
+              name: namespace
+          from_file: "manifests/ghcr-pull-secret.yaml"
+          encrypted_paths:
+            - .dockerconfigjson
+        - name: pvc
+          parents:
+            - kind: manifest
+              name: namespace
+          from_file: "manifests/pvc.yaml"
+        - name: service
+          parents:
+            - kind: manifest
+              name: namespace
+          from_file: "manifests/service.yaml"
+        - name: deployment
+          parents:
+            - kind: manifest
+              name: session-secret
+            - kind: manifest
+              name: ghcr-pull-secret
+            - kind: manifest
+              name: pvc
+          from_file: "manifests/deployment.yaml"
+        - name: ingress
+          parents:
+            - kind: manifest
+              name: service
+          from_file: "manifests/ingress.yaml"

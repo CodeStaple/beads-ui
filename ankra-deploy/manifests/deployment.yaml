@@ -1,0 +1,94 @@
+# Source: beads-linear/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: beads-linear
+  namespace: beads
+  labels:
+    app.kubernetes.io/name: beads-linear
+    app.kubernetes.io/instance: beads-linear
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/version: "0.1.0"
+spec:
+  replicas: 1
+  # The accounts file is a single ReadWriteOnce volume, so a rolling update
+  # must not run two writers against it at once.
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: beads-linear
+      app.kubernetes.io/instance: beads-linear
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: beads-linear
+        app.kubernetes.io/instance: beads-linear
+      annotations:
+    spec:
+      imagePullSecrets:
+        - name: ghcr-pull
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        fsGroup: 1001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: app
+          image: "ghcr.io/codestaple/beads-ui:sha-6a0549e"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 3000
+          env:
+            - name: DATA_DIR
+              value: /data
+            - name: POLL_INTERVAL_MS
+              value: "5000"
+            - name: WEBAUTHN_RP_ID
+              value: "beads.8hwr0gx83n.2hqbgfae9a.ankra.cc"
+            - name: WEBAUTHN_ORIGIN
+              value: "https://beads.8hwr0gx83n.2hqbgfae9a.ankra.cc"
+            - name: SESSION_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: beads-linear-session
+                  key: sessionSecret
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          resources:
+            limits:
+              memory: 512Mi
+            requests:
+              cpu: 50m
+              memory: 128Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: data
+              mountPath: /data
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: data
+          persistentVolumeClaim:
+            claimName: beads-linear-data

@@ -1,0 +1,31 @@
+# Source: beads-linear/templates/ingress.yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: beads-linear
+  namespace: beads
+  labels:
+    app.kubernetes.io/name: beads-linear
+    app.kubernetes.io/instance: beads-linear
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/version: "0.1.0"
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    external-dns.alpha.kubernetes.io/hostname: "beads.8hwr0gx83n.2hqbgfae9a.ankra.cc"
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts:
+        - "beads.8hwr0gx83n.2hqbgfae9a.ankra.cc"
+      secretName: beads-linear-tls
+  rules:
+    - host: "beads.8hwr0gx83n.2hqbgfae9a.ankra.cc"
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: beads-linear
+                port:
+                  number: 80

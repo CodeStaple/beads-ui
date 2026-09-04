@@ -11,6 +11,7 @@ import {
   type JSX,
   type ReactNode,
 } from 'react';
+import { usePathname } from 'next/navigation';
 import type { Issue } from '@/lib/beads';
 
 export type ConnectionState = 'connecting' | 'live' | 'syncing' | 'error';
@@ -65,7 +66,14 @@ async function readError(response: Response): Promise<string> {
   }
 }
 
+/** Routes that render before a tenant exists, so they must not poll for data. */
+const OFFLINE_ROUTES = ['/login', '/signup', '/onboarding'];
+
 export function StoreProvider({ children }: { children: ReactNode }): JSX.Element {
+  const pathname = usePathname();
+  const offline = OFFLINE_ROUTES.some(
+    (route) => pathname === route || pathname.startsWith(`${route}/`),
+  );
   const [issues, setIssues] = useState<Issue[]>([]);
   const [connection, setConnection] = useState<ConnectionState>('connecting');
   const [source, setSource] = useState<SourceMeta | null>(null);
@@ -127,12 +135,15 @@ export function StoreProvider({ children }: { children: ReactNode }): JSX.Elemen
   }, []);
 
   useEffect(() => {
+    if (offline) return;
     void refresh();
-  }, [refresh]);
+  }, [refresh, offline]);
 
   // Live updates: the server pushes a fresh snapshot whenever the GitHub blob
   // sha changes, whether this app or `bd` + `git push` caused it.
   useEffect(() => {
+    if (offline) return;
+
     let source: EventSource | null = null;
     let retry: ReturnType<typeof setTimeout> | null = null;
     let closed = false;
@@ -179,7 +190,7 @@ export function StoreProvider({ children }: { children: ReactNode }): JSX.Elemen
       if (retry) clearTimeout(retry);
       source?.close();
     };
-  }, []);
+  }, [offline]);
 
   const applyLocal = useCallback((updated: Issue) => {
     setIssues((current) => {

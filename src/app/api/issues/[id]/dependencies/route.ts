@@ -2,7 +2,8 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
 import { linkDependency, unlinkDependency } from '@/lib/db';
 import { fail, noStore } from '@/lib/api';
-import { watcher } from '@/lib/watcher';
+import { watcherFor } from '@/lib/watcher';
+import { requireTenant } from '@/lib/tenant';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -16,6 +17,7 @@ type Context = { params: Promise<{ id: string }> };
 
 export async function POST(request: NextRequest, context: Context): Promise<NextResponse> {
   try {
+    const { user, org, config } = await requireTenant();
     const { id } = await context.params;
     const parsed = linkSchema.safeParse(await request.json());
     if (!parsed.success) {
@@ -25,14 +27,14 @@ export async function POST(request: NextRequest, context: Context): Promise<Next
       );
     }
 
-    const actor = process.env['BEADS_ACTOR'] ?? 'beads-linear';
     const { value, database } = await linkDependency(
       id,
       parsed.data.depends_on_id,
       parsed.data.type,
-      actor,
+      user.name,
+      config,
     );
-    watcher.publish(database);
+    watcherFor(org.id, config).publish(database);
 
     return NextResponse.json({ issue: value, sha: database.sha }, { headers: noStore });
   } catch (error) {
@@ -42,6 +44,7 @@ export async function POST(request: NextRequest, context: Context): Promise<Next
 
 export async function DELETE(request: NextRequest, context: Context): Promise<NextResponse> {
   try {
+    const { org, config } = await requireTenant();
     const { id } = await context.params;
     const target = new URL(request.url).searchParams.get('depends_on_id');
     if (!target) {
@@ -51,8 +54,8 @@ export async function DELETE(request: NextRequest, context: Context): Promise<Ne
       );
     }
 
-    const { value, database } = await unlinkDependency(id, target);
-    watcher.publish(database);
+    const { value, database } = await unlinkDependency(id, target, config);
+    watcherFor(org.id, config).publish(database);
 
     return NextResponse.json({ issue: value, sha: database.sha }, { headers: noStore });
   } catch (error) {

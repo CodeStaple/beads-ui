@@ -8,6 +8,10 @@ export interface GitHubConfig {
   token: string;
   committerName: string;
   committerEmail: string;
+  /** Fallback id prefix when the JSONL file holds no issue to infer one from. */
+  prefix: string;
+  /** Recorded as the author of comments and dependency edges made in the UI. */
+  actor: string;
 }
 
 export class GitHubError extends Error {
@@ -34,34 +38,6 @@ export class MissingConfigError extends Error {
     super(message);
     this.name = 'MissingConfigError';
   }
-}
-
-export function loadConfig(): GitHubConfig {
-  const token = process.env['GITHUB_TOKEN']?.trim();
-  const owner = process.env['GITHUB_OWNER']?.trim();
-  const repo = process.env['GITHUB_REPO']?.trim();
-
-  const missing: string[] = [];
-  if (!token) missing.push('GITHUB_TOKEN');
-  if (!owner) missing.push('GITHUB_OWNER');
-  if (!repo) missing.push('GITHUB_REPO');
-
-  if (missing.length) {
-    throw new MissingConfigError(
-      `Missing ${missing.join(', ')}. Copy .env.example to .env.local and fill it in.`,
-    );
-  }
-
-  return {
-    owner: owner!,
-    repo: repo!,
-    token: token!,
-    branch: process.env['GITHUB_BRANCH']?.trim() || 'beads-db',
-    path: process.env['GITHUB_PATH']?.trim() || '.beads/issues.jsonl',
-    committerName: process.env['GIT_COMMITTER_NAME']?.trim() || 'beads-linear',
-    committerEmail:
-      process.env['GIT_COMMITTER_EMAIL']?.trim() || 'beads-linear@users.noreply.github.com',
-  };
 }
 
 async function request(
@@ -150,6 +126,44 @@ async function readLargeBlob(config: GitHubConfig, sha: string): Promise<string>
   return decodeBase64(blob.content);
 }
 
+interface TreeEntry {
+  path: string;
+  type: string;
+  sha: string;
+}
+
+/**
+ * Walks the path one directory at a time through the Git Data API. Used when
+ * the Contents API cannot serve the file — on a multi-megabyte tracker it
+ * answers 500 rather than a payload, and a tracker that has grown is exactly
+ * when it must keep working.
+ */
+async function resolveBlobSha(config: GitHubConfig): Promise<string | null> {
+  const segments = config.path.split('/').filter(Boolean);
+  if (segments.length === 0) return null;
+
+  let treeSha = encodeURIComponent(config.branch);
+
+  for (const [index, segment] of segments.entries()) {
+    const response = await request(
+      config,
+      `/repos/${config.owner}/${config.repo}/git/trees/${treeSha}`,
+    );
+    if (!response.ok) return null;
+
+    const tree = (await response.json()) as { tree?: TreeEntry[] };
+    const entry = tree.tree?.find((candidate) => candidate.path === segment);
+    if (!entry) return null;
+
+    const isLast = index === segments.length - 1;
+    if (isLast) return entry.type === 'blob' ? entry.sha : null;
+    if (entry.type !== 'tree') return null;
+    treeSha = entry.sha;
+  }
+
+  return null;
+}
+
 export async function readFile(config: GitHubConfig): Promise<FileSnapshot> {
   const headSha = await getBranchHead(config);
 
@@ -162,22 +176,28 @@ export async function readFile(config: GitHubConfig): Promise<FileSnapshot> {
     return { sha: null, content: '', headSha };
   }
 
-  if (!response.ok) {
-    throw new GitHubError('Could not read database file', response.status, await response.text());
+  if (response.ok) {
+    const file = (await response.json()) as {
+      sha: string;
+      content?: string;
+      encoding?: string;
+      size?: number;
+    };
+
+    if (file.encoding === 'base64' && typeof file.content === 'string') {
+      return { sha: file.sha, content: decodeBase64(file.content), headSha };
+    }
+
+    return { sha: file.sha, content: await readLargeBlob(config, file.sha), headSha };
   }
 
-  const file = (await response.json()) as {
-    sha: string;
-    content?: string;
-    encoding?: string;
-    size?: number;
-  };
-
-  if (file.encoding === 'base64' && typeof file.content === 'string') {
-    return { sha: file.sha, content: decodeBase64(file.content), headSha };
+  const failure = await response.text();
+  const blobSha = await resolveBlobSha(config);
+  if (!blobSha) {
+    throw new GitHubError('Could not read database file', response.status, failure);
   }
 
-  return { sha: file.sha, content: await readLargeBlob(config, file.sha), headSha };
+  return { sha: blobSha, content: await readLargeBlob(config, blobSha), headSha };
 }
 
 export async function writeFile(

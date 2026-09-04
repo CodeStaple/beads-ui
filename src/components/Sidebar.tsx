@@ -133,6 +133,11 @@ export function Sidebar({ onOpenCreate }: { onOpenCreate: () => void }): JSX.Ele
           <NavLink href="/board" icon={<Icon.Board size={15} />} label="Board" />
           <NavLink href="/graph" icon={<Icon.Graph size={15} />} label="Dependencies" />
           <NavLink href="/history" icon={<Icon.History size={15} />} label="Database history" />
+          <NavLink
+            href="/settings/security"
+            icon={<Icon.Settings size={15} />}
+            label="Account and passkeys"
+          />
         </Section>
 
         {stats.epics.length ? (
