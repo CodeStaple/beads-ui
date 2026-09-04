@@ -2,7 +2,8 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
 import { deleteIssue, updateIssue } from '@/lib/db';
 import { fail, noStore } from '@/lib/api';
-import { watcher } from '@/lib/watcher';
+import { watcherFor } from '@/lib/watcher';
+import { requireTenant } from '@/lib/tenant';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -27,6 +28,7 @@ type Context = { params: Promise<{ id: string }> };
 
 export async function PATCH(request: NextRequest, context: Context): Promise<NextResponse> {
   try {
+    const { org, config } = await requireTenant();
     const { id } = await context.params;
     const parsed = updateSchema.safeParse(await request.json());
     if (!parsed.success) {
@@ -36,8 +38,8 @@ export async function PATCH(request: NextRequest, context: Context): Promise<Nex
       );
     }
 
-    const { value, database } = await updateIssue(id, parsed.data);
-    watcher.publish(database);
+    const { value, database } = await updateIssue(id, parsed.data, config);
+    watcherFor(org.id, config).publish(database);
 
     return NextResponse.json({ issue: value, sha: database.sha }, { headers: noStore });
   } catch (error) {
@@ -47,9 +49,10 @@ export async function PATCH(request: NextRequest, context: Context): Promise<Nex
 
 export async function DELETE(_request: NextRequest, context: Context): Promise<NextResponse> {
   try {
+    const { org, config } = await requireTenant();
     const { id } = await context.params;
-    const { database } = await deleteIssue(id);
-    watcher.publish(database);
+    const { database } = await deleteIssue(id, config);
+    watcherFor(org.id, config).publish(database);
 
     return NextResponse.json({ ok: true, sha: database.sha }, { headers: noStore });
   } catch (error) {

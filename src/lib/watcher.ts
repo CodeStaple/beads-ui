@@ -1,4 +1,4 @@
-import { loadConfig } from './github';
+import type { GitHubConfig } from './github';
 import { load, type Database } from './db';
 
 export interface Snapshot {
@@ -11,9 +11,16 @@ export interface Snapshot {
 
 type Listener = (snapshot: Snapshot) => void;
 
+export function pollIntervalMs(): number {
+  const raw = Number(process.env['POLL_INTERVAL_MS'] ?? '5000');
+  return Number.isFinite(raw) && raw >= 1000 ? raw : 5000;
+}
+
 /**
- * One poll loop per server process, fanned out to every connected client.
- * Without this, each open tab would burn its own GitHub rate limit.
+ * One poll loop per organisation, fanned out to every client of that
+ * organisation. Without this, each open tab would burn its own GitHub rate
+ * limit — and keying by organisation is what keeps one tenant's snapshot from
+ * ever reaching another's browser.
  */
 class Watcher {
   private listeners = new Set<Listener>();
@@ -21,9 +28,22 @@ class Watcher {
   private latest: Snapshot | null = null;
   private inFlight: Promise<Snapshot> | null = null;
 
+  constructor(private config: GitHubConfig) {}
+
   get intervalMs(): number {
-    const raw = Number(process.env['POLL_INTERVAL_MS'] ?? '5000');
-    return Number.isFinite(raw) && raw >= 1000 ? raw : 5000;
+    return pollIntervalMs();
+  }
+
+  /** A token refresh or repository change must not keep polling the old one. */
+  retarget(config: GitHubConfig): void {
+    const changed =
+      config.owner !== this.config.owner ||
+      config.repo !== this.config.repo ||
+      config.branch !== this.config.branch ||
+      config.path !== this.config.path;
+
+    this.config = config;
+    if (changed) this.latest = null;
   }
 
   subscribe(listener: Listener): () => void {
@@ -42,7 +62,7 @@ class Watcher {
     if (!force && this.inFlight) return this.inFlight;
 
     const work = (async () => {
-      const database = await load(loadConfig());
+      const database = await load(this.config);
       const snapshot: Snapshot = {
         sha: database.sha,
         headSha: database.headSha,
@@ -108,10 +128,24 @@ class Watcher {
   }
 }
 
-const globalKey = Symbol.for('beads-linear.watcher');
-type GlobalWithWatcher = typeof globalThis & { [globalKey]?: Watcher };
+const globalKey = Symbol.for('beads-linear.watchers');
+type GlobalWithWatchers = typeof globalThis & { [globalKey]?: Map<string, Watcher> };
 
 /** Survives Next.js dev-server module reloads. */
-export const watcher: Watcher =
-  (globalThis as GlobalWithWatcher)[globalKey] ??
-  ((globalThis as GlobalWithWatcher)[globalKey] = new Watcher());
+const watchers: Map<string, Watcher> =
+  (globalThis as GlobalWithWatchers)[globalKey] ??
+  ((globalThis as GlobalWithWatchers)[globalKey] = new Map());
+
+export function watcherFor(orgId: string, config: GitHubConfig): Watcher {
+  const existing = watchers.get(orgId);
+  if (existing) {
+    existing.retarget(config);
+    return existing;
+  }
+
+  const created = new Watcher(config);
+  watchers.set(orgId, created);
+  return created;
+}
+
+export type { Watcher };

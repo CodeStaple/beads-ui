@@ -6,6 +6,10 @@ metadata:
     {{- include "beads-linear.labels" . | nindent 4 }}
 spec:
   replicas: {{ .Values.replicaCount }}
+  # The accounts file is a single ReadWriteOnce volume, so a rolling update
+  # must not run two writers against it at once.
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       {{- include "beads-linear.selectorLabels" . | nindent 6 }}
@@ -23,6 +27,7 @@ spec:
       securityContext:
         runAsNonRoot: true
         runAsUser: 1001
+        fsGroup: 1001
         seccompProfile:
           type: RuntimeDefault
       containers:
@@ -33,25 +38,19 @@ spec:
             - name: http
               containerPort: {{ .Values.service.targetPort }}
           env:
-            - name: GITHUB_OWNER
-              value: {{ .Values.github.owner | quote }}
-            - name: GITHUB_REPO
-              value: {{ .Values.github.repo | quote }}
-            - name: GITHUB_BRANCH
-              value: {{ .Values.github.branch | quote }}
-            - name: GITHUB_PATH
-              value: {{ .Values.github.path | quote }}
-            - name: BEADS_PREFIX
-              value: {{ .Values.beads.prefix | quote }}
-            - name: BEADS_ACTOR
-              value: {{ .Values.beads.actor | quote }}
+            - name: DATA_DIR
+              value: /data
             - name: POLL_INTERVAL_MS
               value: {{ .Values.pollIntervalMs | quote }}
-            - name: GITHUB_TOKEN
+            - name: WEBAUTHN_RP_ID
+              value: {{ .Values.ingress.host | quote }}
+            - name: WEBAUTHN_ORIGIN
+              value: {{ printf "https://%s" .Values.ingress.host | quote }}
+            - name: SESSION_SECRET
               valueFrom:
                 secretKeyRef:
                   name: {{ include "beads-linear.secretName" . }}
-                  key: token
+                  key: sessionSecret
           livenessProbe:
             httpGet:
               path: /api/health
@@ -74,9 +73,18 @@ spec:
           volumeMounts:
             - name: tmp
               mountPath: /tmp
+            - name: data
+              mountPath: /data
       volumes:
         - name: tmp
           emptyDir: {}
+        - name: data
+          {{- if .Values.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ .Values.persistence.existingClaim | default (printf "%s-data" (include "beads-linear.fullname" .)) }}
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector: {{- toYaml . | nindent 8 }}
       {{- end }}

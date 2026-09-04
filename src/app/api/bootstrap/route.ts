@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
-import { ensureBranch, getRepoMeta, loadConfig, readFile, writeFile } from '@/lib/github';
+import { ensureBranch, getRepoMeta, readFile, writeFile } from '@/lib/github';
 import { describe } from '@/lib/db';
 import { fail, noStore } from '@/lib/api';
+import { requireTenant } from '@/lib/tenant';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -9,7 +10,7 @@ export const runtime = 'nodejs';
 /** Reports whether the data branch and JSONL file exist yet. */
 export async function GET(): Promise<NextResponse> {
   try {
-    const config = loadConfig();
+    const { config } = await requireTenant();
     const meta = await getRepoMeta(config);
     const snapshot = await readFile(config);
 
@@ -31,7 +32,7 @@ export async function GET(): Promise<NextResponse> {
 /** Creates the data branch and an empty JSONL file when they are missing. */
 export async function POST(): Promise<NextResponse> {
   try {
-    const config = loadConfig();
+    const { config } = await requireTenant();
     const branch = await ensureBranch(config);
     const snapshot = await readFile(config);
 

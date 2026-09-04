@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState, type JSX, type ReactNode } from 'react';
+import { usePathname, useRouter } from 'next/navigation';
 import { Sidebar } from './Sidebar';
 import { CommandPalette } from './CommandPalette';
 import { CreateDialog } from './CreateDialog';
@@ -28,9 +29,35 @@ function Toasts(): JSX.Element {
   );
 }
 
+/** Sign-in and onboarding own the whole viewport, with no tracker chrome. */
+const BARE_ROUTES = ['/login', '/signup', '/onboarding'];
+
 export function AppShell({ children }: { children: ReactNode }): JSX.Element {
+  const pathname = usePathname();
+  const router = useRouter();
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
+  const bare = BARE_ROUTES.some((route) => pathname === route || pathname.startsWith(`${route}/`));
+
+  // A signed-in person whose organisation has no repository yet cannot use the
+  // tracker at all, so send them back to finish setup rather than showing an
+  // empty board with a 503 behind it.
+  useEffect(() => {
+    if (bare) return;
+    let cancelled = false;
+
+    void (async () => {
+      const response = await fetch('/api/auth/session', { cache: 'no-store' });
+      if (!response.ok || cancelled) return;
+      const body = (await response.json()) as { user: { org: { repo: unknown } } | null };
+      if (cancelled) return;
+      if (body.user && !body.user.org.repo) router.replace('/onboarding');
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [bare, pathname, router]);
 
   const openCreate = useCallback(() => {
     setPaletteOpen(false);
@@ -63,6 +90,15 @@ export function AppShell({ children }: { children: ReactNode }): JSX.Element {
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [openCreate]);
+
+  if (bare) {
+    return (
+      <>
+        {children}
+        <Toasts />
+      </>
+    );
+  }
 
   return (
     <div className="shell">

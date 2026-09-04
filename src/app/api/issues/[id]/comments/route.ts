@@ -2,7 +2,8 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
 import { addComment } from '@/lib/db';
 import { fail, noStore } from '@/lib/api';
-import { watcher } from '@/lib/watcher';
+import { watcherFor } from '@/lib/watcher';
+import { requireTenant } from '@/lib/tenant';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -16,6 +17,7 @@ type Context = { params: Promise<{ id: string }> };
 
 export async function POST(request: NextRequest, context: Context): Promise<NextResponse> {
   try {
+    const { user, org, config } = await requireTenant();
     const { id } = await context.params;
     const parsed = schema.safeParse(await request.json());
     if (!parsed.success) {
@@ -25,9 +27,9 @@ export async function POST(request: NextRequest, context: Context): Promise<Next
       );
     }
 
-    const author = parsed.data.author ?? process.env['BEADS_ACTOR'] ?? 'beads-linear';
-    const { value, database } = await addComment(id, parsed.data.text, author);
-    watcher.publish(database);
+    const author = parsed.data.author ?? user.name;
+    const { value, database } = await addComment(id, parsed.data.text, author, config);
+    watcherFor(org.id, config).publish(database);
 
     return NextResponse.json({ issue: value, sha: database.sha }, { headers: noStore });
   } catch (error) {

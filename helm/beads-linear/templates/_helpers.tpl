@@ -23,17 +23,9 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end -}}
 
 {{- define "beads-linear.secretName" -}}
-{{- if .Values.github.existingSecret -}}
-{{- .Values.github.existingSecret -}}
+{{- if .Values.session.existingSecret -}}
+{{- .Values.session.existingSecret -}}
 {{- else -}}
-{{- printf "%s-github" (include "beads-linear.fullname" .) -}}
-{{- end -}}
-{{- end -}}
-
-{{- define "beads-linear.basicAuthSecretName" -}}
-{{- if .Values.basicAuth.existingSecret -}}
-{{- .Values.basicAuth.existingSecret -}}
-{{- else -}}
-{{- printf "%s-basic-auth" (include "beads-linear.fullname" .) -}}
+{{- printf "%s-session" (include "beads-linear.fullname" .) -}}
 {{- end -}}
 {{- end -}}

@@ -9,7 +9,6 @@ import {
   ConflictError,
   type GitHubConfig,
   type FileSnapshot,
-  loadConfig,
   readFile,
   writeFile,
 } from './github';
@@ -30,7 +29,7 @@ export interface DatabaseMeta {
   path: string;
 }
 
-export function describe(config: GitHubConfig = loadConfig()): DatabaseMeta {
+export function describe(config: GitHubConfig): DatabaseMeta {
   return {
     owner: config.owner,
     repo: config.repo,
@@ -50,9 +49,9 @@ function toDatabase(snapshot: FileSnapshot, fallbackPrefix: string): Database {
   };
 }
 
-export async function load(config: GitHubConfig = loadConfig()): Promise<Database> {
+export async function load(config: GitHubConfig): Promise<Database> {
   const snapshot = await readFile(config);
-  return toDatabase(snapshot, process.env['BEADS_PREFIX']?.trim() || 'so');
+  return toDatabase(snapshot, config.prefix);
 }
 
 export interface MutationResult<T> {
@@ -67,7 +66,7 @@ export interface MutationResult<T> {
  */
 export async function mutate<T>(
   apply: (issues: Issue[]) => { issues: Issue[]; value: T; message: string },
-  config: GitHubConfig = loadConfig(),
+  config: GitHubConfig,
   attempts = 4,
 ): Promise<MutationResult<T>> {
   let lastError: unknown;
@@ -118,10 +117,10 @@ export interface CreateInput {
 
 export async function createIssue(
   input: CreateInput,
-  config: GitHubConfig = loadConfig(),
+  config: GitHubConfig,
 ): Promise<MutationResult<Issue>> {
   return mutate((issues) => {
-    const prefix = inferPrefix(issues, process.env['BEADS_PREFIX']?.trim() || 'so');
+    const prefix = inferPrefix(issues, config.prefix);
     const timestamp = nowIso();
 
     const issue: Issue = {
@@ -174,7 +173,7 @@ export type UpdateInput = Partial<
 export async function updateIssue(
   id: string,
   patch: UpdateInput,
-  config: GitHubConfig = loadConfig(),
+  config: GitHubConfig,
 ): Promise<MutationResult<Issue>> {
   return mutate((issues) => {
     const index = issues.findIndex((issue) => issue.id === id);
@@ -209,7 +208,7 @@ export async function updateIssue(
 
 export async function deleteIssue(
   id: string,
-  config: GitHubConfig = loadConfig(),
+  config: GitHubConfig,
 ): Promise<MutationResult<{ id: string }>> {
   return mutate((issues) => {
     if (!issues.some((issue) => issue.id === id)) throw new NotFoundError(id);
@@ -238,7 +237,7 @@ export async function addComment(
   id: string,
   text: string,
   author: string,
-  config: GitHubConfig = loadConfig(),
+  config: GitHubConfig,
 ): Promise<MutationResult<Issue>> {
   return mutate((issues) => {
     const index = issues.findIndex((issue) => issue.id === id);
@@ -270,7 +269,7 @@ export async function linkDependency(
   toId: string,
   type: string,
   actor: string,
-  config: GitHubConfig = loadConfig(),
+  config: GitHubConfig,
 ): Promise<MutationResult<Issue>> {
   return mutate((issues) => {
     const index = issues.findIndex((issue) => issue.id === fromId);
@@ -309,7 +308,7 @@ export async function linkDependency(
 export async function unlinkDependency(
   fromId: string,
   toId: string,
-  config: GitHubConfig = loadConfig(),
+  config: GitHubConfig,
 ): Promise<MutationResult<Issue>> {
   return mutate((issues) => {
     const index = issues.findIndex((issue) => issue.id === fromId);

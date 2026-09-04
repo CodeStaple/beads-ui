@@ -1,51 +1,39 @@
-replicaCount: 2
+# One replica by design: accounts and organisation settings live on a single
+# ReadWriteOnce volume, and the tracker itself is in GitHub rather than here.
+replicaCount: 1
 
-# Matches the lane the rest of this cluster already uses:
-#   artifact.smartoptics.dev/<app>-images/<app>:sha-<short>
 image:
-  repository: artifact.smartoptics.dev/beads-images/beads-linear
+  repository: ghcr.io/codestaple/beads-ui
   tag: ""            # defaults to .Chart.AppVersion
   pullPolicy: IfNotPresent
 
-imagePullSecrets:
-  - name: harbor-registry
+imagePullSecrets: []
 
-# GitHub is the database. The token is supplied as a Secret, never baked into
-# the image and never committed.
-github:
-  owner: smartoptics-dwdm
-  repo: beads
-  branch: beads-db
-  path: .beads/issues.jsonl
-  # Set either an existing secret holding key `token`, or an inline value
-  # (inline is intended for --set-file / --set-env at deploy time only).
+# Signs the session cookie. Rotating it signs everyone out, which is the
+# intended way to revoke every session at once.
+session:
   existingSecret: ""
-  token: ""
+  secret: ""
 
-beads:
-  prefix: so
-  actor: beads-linear
+# Holds accounts, passkeys, and each organisation's GitHub connection.
+persistence:
+  enabled: true
+  existingClaim: ""
+  size: 1Gi
+  storageClass: ""
 
 pollIntervalMs: 5000
 
 ingress:
   enabled: true
   className: traefik
-  host: beads.smartoptics.dev
+  host: beads.example.com
   # Ankra custom-dns watches this annotation and publishes the record.
   dnsAnnotation: true
   tls:
     enabled: true
     issuer: letsencrypt-prod
     secretName: beads-linear-tls
-
-# The app has no login of its own, so the edge enforces one. Without this the
-# write API would be open to anyone who reaches the host.
-basicAuth:
-  enabled: true
-  # htpasswd lines (bcrypt). Supplied at deploy time; never committed.
-  existingSecret: ""
-  users: ""
 
 resources:
   requests:

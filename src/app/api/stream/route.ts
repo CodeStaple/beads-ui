@@ -1,5 +1,6 @@
-import type { NextRequest } from 'next/server';
-import { watcher } from '@/lib/watcher';
+import { NextResponse, type NextRequest } from 'next/server';
+import { watcherFor } from '@/lib/watcher';
+import { requireTenant } from '@/lib/tenant';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -9,6 +10,16 @@ export const runtime = 'nodejs';
  * so a change made by `bd` + `git push` shows up without a reload.
  */
 export async function GET(request: NextRequest): Promise<Response> {
+  let tenant;
+  try {
+    tenant = await requireTenant();
+  } catch {
+    // An unauthenticated or half-onboarded client gets a plain error rather
+    // than a stream it would retry against forever.
+    return NextResponse.json({ error: 'Not available', code: 'auth' }, { status: 401 });
+  }
+
+  const watcher = watcherFor(tenant.org.id, tenant.config);
   const encoder = new TextEncoder();
 
   const stream = new ReadableStream<Uint8Array>({

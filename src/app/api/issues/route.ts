@@ -2,7 +2,8 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
 import { createIssue } from '@/lib/db';
 import { fail, noStore } from '@/lib/api';
-import { watcher } from '@/lib/watcher';
+import { watcherFor } from '@/lib/watcher';
+import { requireTenant } from '@/lib/tenant';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -23,6 +24,7 @@ const createSchema = z.object({
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
+    const { user, org, config } = await requireTenant();
     const parsed = createSchema.safeParse(await request.json());
     if (!parsed.success) {
       return NextResponse.json(
@@ -31,8 +33,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       );
     }
 
-    const { value, database } = await createIssue(parsed.data);
-    watcher.publish(database);
+    const { value, database } = await createIssue(
+      { ...parsed.data, actor: parsed.data.actor ?? user.name },
+      config,
+    );
+    watcherFor(org.id, config).publish(database);
 
     return NextResponse.json({ issue: value, sha: database.sha }, { headers: noStore });
   } catch (error) {

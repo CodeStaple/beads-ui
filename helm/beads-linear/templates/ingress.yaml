@@ -9,10 +9,6 @@ metadata:
     {{- if .Values.ingress.tls.enabled }}
     cert-manager.io/cluster-issuer: {{ .Values.ingress.tls.issuer | quote }}
     {{- end }}
-    {{- if .Values.basicAuth.enabled }}
-    traefik.ingress.kubernetes.io/router.middlewares: >-
-      {{ .Release.Namespace }}-{{ include "beads-linear.fullname" . }}-auth@kubernetescrd
-    {{- end }}
     {{- if .Values.ingress.dnsAnnotation }}
     external-dns.alpha.kubernetes.io/hostname: {{ .Values.ingress.host | quote }}
     {{- end }}
