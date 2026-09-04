@@ -1,0 +1,66 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  REGISTRY: registry.ankra.cloud
+  PROJECT: org-08267821-3c87-47b2-a759-67c3dbf91c0c
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npx tsc --noEmit
+      - run: npm run build
+      - uses: azure/setup-helm@v4
+      - name: Lint the chart
+        run: |
+          helm lint helm/beads-linear \
+            --set github.token=dummy \
+            --set basicAuth.users=dummy
+
+  image:
+    needs: verify
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Derive tags
+        id: meta
+        run: |
+          echo "sha_tag=sha-$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.ANKRA_REGISTRY_USERNAME }}
+          password: ${{ secrets.ANKRA_REGISTRY_PASSWORD }}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          # The cluster nodes are amd64; this runner is too, so no QEMU needed.
+          platforms: linux/amd64
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.PROJECT }}/images/beads-linear:${{ steps.meta.outputs.sha_tag }}
+            ${{ env.REGISTRY }}/${{ env.PROJECT }}/images/beads-linear:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
