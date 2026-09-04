@@ -1,0 +1,6 @@
+apiVersion: v2
+name: beads-linear
+description: A Linear-identical live interface for the beads issue tracker, backed by GitHub
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

@@ -1,0 +1,62 @@
+replicaCount: 2
+
+image:
+  repository: registry.ankra.cloud/org-08267821-3c87-47b2-a759-67c3dbf91c0c/images/beads-linear
+  tag: ""            # defaults to .Chart.AppVersion
+  pullPolicy: IfNotPresent
+
+imagePullSecrets:
+  - name: ankra-registry-pull
+
+# GitHub is the database. The token is supplied as a Secret, never baked into
+# the image and never committed.
+github:
+  owner: smartoptics-dwdm
+  repo: beads
+  branch: beads-db
+  path: .beads/issues.jsonl
+  # Set either an existing secret holding key `token`, or an inline value
+  # (inline is intended for --set-file / --set-env at deploy time only).
+  existingSecret: ""
+  token: ""
+
+beads:
+  prefix: so
+  actor: beads-linear
+
+pollIntervalMs: 5000
+
+ingress:
+  enabled: true
+  className: traefik
+  host: beads.smartoptics.dev
+  # Ankra custom-dns watches this annotation and publishes the record.
+  dnsAnnotation: true
+  tls:
+    enabled: true
+    issuer: letsencrypt-prod
+    secretName: beads-linear-tls
+
+# The app has no login of its own, so the edge enforces one. Without this the
+# write API would be open to anyone who reaches the host.
+basicAuth:
+  enabled: true
+  # htpasswd lines (bcrypt). Supplied at deploy time; never committed.
+  existingSecret: ""
+  users: ""
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 128Mi
+  limits:
+    memory: 512Mi
+
+service:
+  port: 80
+  targetPort: 3000
+
+podAnnotations: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}
