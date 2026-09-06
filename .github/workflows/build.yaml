@@ -1,4 +1,4 @@
-name: build
+name: verify
 
 on:
   push:
@@ -9,9 +9,9 @@ concurrency:
   group: build-${{ github.ref }}
   cancel-in-progress: true
 
-env:
-  REGISTRY: artifact.smartoptics.dev
-  PROJECT: beads-images
+# Image build and publish belong to Ankra's generated setup workflow, which
+# pushes to the organisation registry with the robot Ankra provisions per
+# application. This workflow only guards code quality.
 
 jobs:
   verify:
@@ -31,36 +31,3 @@ jobs:
           helm lint helm/beads-linear \
             --set github.token=dummy \
             --set basicAuth.users=dummy
-
-  image:
-    needs: verify
-    runs-on: ubuntu-24.04
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Derive tags
-        id: meta
-        run: |
-          echo "sha_tag=sha-$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
-
-      - uses: docker/setup-buildx-action@v3
-
-      - uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ secrets.HARBOR_USERNAME }}
-          password: ${{ secrets.HARBOR_PASSWORD }}
-
-      - uses: docker/build-push-action@v6
-        with:
-          context: .
-          push: true
-          # The cluster nodes are amd64; this runner is too, so no QEMU needed.
-          platforms: linux/amd64
-          tags: |
-            ${{ env.REGISTRY }}/${{ env.PROJECT }}/beads-linear:${{ steps.meta.outputs.sha_tag }}
-            ${{ env.REGISTRY }}/${{ env.PROJECT }}/beads-linear:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max

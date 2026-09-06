@@ -1,5 +1,22 @@
 replicaCount: 2
 
+# Interim lane: build from public source at pod start instead of pulling a
+# published image. Needed only while the image pipeline is blocked - Ankra
+# Pipelines needs the platform_builds capability enabled for the org, and the
+# Applications lane needs GitHub App permissions on the CodeStaple install.
+# Turn this off and set image.tag as soon as a real image exists.
+sourceBuild:
+  enabled: false
+  repo: CodeStaple/beads-ui
+  ref: main
+  builderImage: node:22-alpine
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      memory: 3Gi
+
 # Matches the lane the rest of this cluster already uses:
 #   artifact.smartoptics.dev/<app>-images/<app>:sha-<short>
 image:
